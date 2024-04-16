@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
@@ -88,7 +89,7 @@ ax.plot(
     daily_orders_df["order_count"],
     marker='o', 
     linewidth=2,
-    color="#90CAF9"
+    color="#72BCD4"
 )
 ax.tick_params(axis='y', labelsize=20)
 ax.tick_params(axis='x', labelsize=15)
@@ -105,8 +106,8 @@ sns.barplot(x="total_order", y="product_category_name_english", data=sum_order_i
             palette=colors, hue="product_category_name_english", ax=ax[0])
 ax[0].set_ylabel(None)
 ax[0].set_xlabel(None)
-ax[0].set_title("Best Performing Product", loc="center", fontsize=15)
-ax[0].tick_params(axis ='y', labelsize=12)
+ax[0].set_title("Best Performing Product", loc="center", fontsize=20)
+ax[0].tick_params(axis ='y', labelsize=20)
  
 sns.barplot(x="total_order", y="product_category_name_english", data=sum_order_items_df.sort_values(by="total_order", ascending=True).head(5), 
             palette=colors, hue="product_category_name_english", ax=ax[1])
@@ -115,9 +116,10 @@ ax[1].set_xlabel(None)
 ax[1].invert_xaxis()
 ax[1].yaxis.set_label_position("right")
 ax[1].yaxis.tick_right()
-ax[1].set_title("Worst Performing Product", loc="center", fontsize=15)
-ax[1].tick_params(axis='y', labelsize=12)
+ax[1].set_title("Worst Performing Product", loc="center", fontsize=20)
+ax[1].tick_params(axis='y', labelsize=20)
 
+plt.suptitle("Best and Worst Performing Product by Number of Total Order", fontsize=20)
 st.pyplot(fig)
 
 # Best Customer Based on RFM Parameters
@@ -137,30 +139,79 @@ with col3:
     avg_frequency = format_currency(rfm_df.monetary.mean(), "R$", locale='pt_BR') 
     st.metric("Average Monetary", value=avg_frequency)
 
-fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(35, 15))
-colors = ["#90CAF9", "#90CAF9", "#90CAF9", "#90CAF9", "#90CAF9"]
+fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30, 15))
+colors = ["#72BCD4", "#72BCD4", "#72BCD4", "#72BCD4", "#72BCD4"]
 
 sns.barplot(y="recency", x="customer_id", data=rfm_df.sort_values(by="recency", ascending=True).head(5), palette=colors, ax=ax[0])
 ax[0].set_ylabel(None)
-ax[0].set_xlabel("customer_id", fontsize=30)
+ax[0].set_xlabel(None)
 ax[0].set_title("By Recency (days)", loc="center", fontsize=50)
 ax[0].tick_params(axis='y', labelsize=30)
 ax[0].tick_params(axis='x', labelsize=35)
 
 sns.barplot(y="frequency", x="customer_id", data=rfm_df.sort_values(by="frequency", ascending=False).head(5), palette=colors, ax=ax[1])
 ax[1].set_ylabel(None)
-ax[1].set_xlabel("customer_id", fontsize=30)
+ax[1].set_xlabel(None)
 ax[1].set_title("By Frequency", loc="center", fontsize=50)
 ax[1].tick_params(axis='y', labelsize=30)
 ax[1].tick_params(axis='x', labelsize=35)
 
 sns.barplot(y="monetary", x="customer_id", data=rfm_df.sort_values(by="monetary", ascending=False).head(5), palette=colors, ax=ax[2])
 ax[2].set_ylabel(None)
-ax[2].set_xlabel("customer_id", fontsize=30)
+ax[2].set_xlabel(None)
 ax[2].set_title("By Monetary", loc="center", fontsize=50)
 ax[2].tick_params(axis='y', labelsize=30)
 ax[2].tick_params(axis='x', labelsize=35)
 
+plt.suptitle("Best Customer Based on RFM Parameters (customer_id)", fontsize=35)
+st.pyplot(fig)
+
+rfm_df['r_rank'] = rfm_df['recency'].rank(ascending=False)
+rfm_df['f_rank'] = rfm_df['frequency'].rank(ascending=True)
+rfm_df['m_rank'] = rfm_df['monetary'].rank(ascending=True)
+
+rfm_df['r_rank_norm'] = (rfm_df['r_rank']/rfm_df['r_rank'].max())*100
+rfm_df['f_rank_norm'] = (rfm_df['f_rank']/rfm_df['f_rank'].max())*100
+rfm_df['m_rank_norm'] = (rfm_df['m_rank']/rfm_df['m_rank'].max())*100
+ 
+rfm_df.drop(columns=['r_rank', 'f_rank', 'm_rank'], inplace=True)
+
+rfm_df['RFM_score'] = 0.15*rfm_df['r_rank_norm']+0.28 * \
+    rfm_df['f_rank_norm']+0.57*rfm_df['m_rank_norm']
+rfm_df['RFM_score'] *= 0.05
+rfm_df = rfm_df.round(2)
+
+rfm_df["customer_segment"] = np.where(
+    rfm_df['RFM_score'] > 4.5, "Top customers", (np.where(
+        rfm_df['RFM_score'] > 4, "High value customer",(np.where(
+            rfm_df['RFM_score'] > 3, "Medium value customer", np.where(
+                rfm_df['RFM_score'] > 1.6, 'Low value customers', 'lost customers'))))))
+
+customer_segment_df = rfm_df.groupby(by="customer_segment", as_index=False).customer_id.nunique()
+customer_segment_df['customer_segment'] = pd.Categorical(customer_segment_df['customer_segment'], [
+    "lost customers", "Low value customers", "Medium value customer",
+    "High value customer", "Top customers"
+])
+
+st.subheader("Customer for Each Segment")
+
+fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(30, 15))
+colors_ = ["#D3D3D3", "#72BCD4", "#72BCD4", "#D3D3D3", "#D3D3D3"]
+
+sns.barplot(
+    x="customer_id", 
+    y="customer_segment",
+    data=customer_segment_df.sort_values(by="customer_segment", ascending=False),
+    palette=colors_,
+    hue="customer_segment",
+)
+plt.title("Number of Customer for Each Segment", loc="center", fontsize=25)
+plt.ylabel(None)
+plt.xlabel(None)
+plt.tick_params(axis='y', labelsize=20)
+
+ax.tick_params(axis='y', labelsize=20)
+ax.tick_params(axis='x', labelsize=20)
 st.pyplot(fig)
 
 st.caption('Copyright © Submission Analisis Data 2024')
